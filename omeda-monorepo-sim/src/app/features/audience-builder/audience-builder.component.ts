@@ -36,6 +36,7 @@ import {
   ChatbotCommand,
   ChatbotUiLock,
 } from '../../models/chatbot-contracts.model';
+import { UIActionHandlerService } from '../../services/ui-action-handler.service';
 
 @Component({
   selector: 'app-audience-builder',
@@ -53,6 +54,7 @@ export class AudienceBuilderComponent implements OnInit, OnDestroy {
   private readonly folderService = inject(FolderService);
   private readonly chatbotLoader = inject(ChatbotLoaderService);
   private readonly destroy$ = new Subject<void>();
+  private readonly uiActionHandler = inject(UIActionHandlerService);
 
   private chatbotEl: HTMLElement | null = null;
 
@@ -209,7 +211,26 @@ export class AudienceBuilderComponent implements OnInit, OnDestroy {
     this.chatbotEl.addEventListener('chatbotAction', this.chatbotActionHandler);
     this.chatbotEl.addEventListener('chatbotUiLock', this.chatbotUiLockHandler);
 
+    this.chatbotEl.addEventListener('chatbotUiAction', async (e: Event) => {
+      const action = (e as CustomEvent).detail;
+      this.log('chatbot-action', `UI Action: ${action.type} → ${JSON.stringify(action)}`);
+
+      const result = await this.uiActionHandler.handle(action);
+
+      this.log(
+        'chatbot-action',
+        `UI Action result: ${result.status}${result.error ? ' — ' + result.error : ''}`
+      );
+    });
+
+    this.chatbotEl.addEventListener('chatbotClearSelections', () => {
+      this.log('chatbot-action', 'Start Over — resetting selections');
+      this.store.dispatch(AudienceActions.loadMockCriteria());
+    });
+
     this.log('info', 'Event listeners attached (chatbotAction, chatbotUiLock)');
+
+
   }
 
   private removeChatbotEventListeners(): void {

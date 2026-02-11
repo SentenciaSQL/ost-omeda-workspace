@@ -13,7 +13,8 @@
         ></textarea>
     <div class="input-actions">
       <button class="attach-btn" title="Attach">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
+             stroke="currentColor" stroke-width="2">
           <path d="M12 5v14M5 12h14"/>
         </svg>
       </button>
@@ -23,11 +24,24 @@
         [disabled]="disabled() || !inputValue().trim()"
         (click)="send()"
       >
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
+             stroke="currentColor" stroke-width="2">
           <path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"/>
         </svg>
       </button>
     </div>
   </div>
-  <div class="char-count">{{ inputValue().length }}/500 max</div>
+  <div class="input-footer">
+    <span class="char-count">{{ inputValue().length }}/500 max</span>
+    @if (showStartOver()) {
+      <button class="start-over-btn" (click)="startOver.emit()">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none"
+             stroke="currentColor" stroke-width="2">
+          <path d="M1 4v6h6M23 20v-6h-6"/>
+          <path d="M20.49 9A9 9 0 005.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 013.51 15"/>
+        </svg>
+        Start Over
+      </button>
+    }
+  </div>
 </div>

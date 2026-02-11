@@ -12,13 +12,15 @@ import {
 })
 export class ChatInputComponent {
   disabled = input(false);
+  showStartOver = input(false);
   messageSent = output<string>();
+  startOver = output<void>();
+
   inputValue = signal('');
   private inputEl = viewChild<ElementRef>('inputEl');
 
   onInput(el: HTMLTextAreaElement): void {
     this.inputValue.set(el.value);
-    // Auto-grow
     el.style.height = 'auto';
     el.style.height = Math.min(el.scrollHeight, 80) + 'px';
   }

@@ -1,0 +1,42 @@
+@if (visible()) {
+  <div class="banner" [class]="status()">
+    @switch (status()) {
+      @case ('connecting') {
+        <div class="banner-content">
+          <span class="spinner"></span>
+          <div class="banner-text">
+            <strong>Reconnecting...</strong>
+            @if (retryAttempt() && retryMax()) {
+              <span class="retry-info">
+                    Attempt {{ retryAttempt() }}/{{ retryMax() }}
+                @if (countdown() > 0) {
+                  · retrying in {{ countdown() }}s
+                }
+                  </span>
+            }
+          </div>
+        </div>
+      }
+      @case ('error') {
+        <div class="banner-content">
+          <span class="error-icon">⚠️</span>
+          <div class="banner-text">
+            <strong>Connection lost</strong>
+            <span class="error-msg">{{ errorMessage() || 'Unable to reach the agent.' }}</span>
+          </div>
+          <button class="retry-btn" (click)="retryClicked.emit()">Retry</button>
+        </div>
+      }
+      @case ('disconnected') {
+        <div class="banner-content">
+          <span class="disc-icon">🔌</span>
+          <div class="banner-text">
+            <strong>Disconnected</strong>
+            <span class="error-msg">Check your connection and try again.</span>
+          </div>
+          <button class="retry-btn" (click)="retryClicked.emit()">Reconnect</button>
+        </div>
+      }
+    }
+  </div>
+}

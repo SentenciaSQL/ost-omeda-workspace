@@ -1,35 +1,31 @@
 import {
-  Component,
-  Input,
-  Output,
-  EventEmitter,
-  OnInit,
-  OnDestroy,
-  OnChanges,
-  SimpleChanges,
-  signal,
-  computed,
-  inject,
-  ChangeDetectionStrategy,
-  ViewEncapsulation,
-  ChangeDetectorRef,
+  Component, Input, Output, EventEmitter,
+  OnInit, OnDestroy, OnChanges, SimpleChanges,
+  signal, computed, inject,
+  ChangeDetectionStrategy, ViewEncapsulation, ChangeDetectorRef, effect, Injector,
 } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { Store } from '@ngrx/store';
+import { Subject, takeUntil } from 'rxjs';
 
 import {
   ChatbotAuth, ChatbotAudienceState, ChatbotCommand,
   ChatbotConfig, ChatbotActionEvent, ChatbotUiLockEvent,
   ChatbotAgentStatusEvent, ChatbotErrorEvent,
 } from './models/contracts.model';
-import { PendingAction } from './models/chat.model';
-import { AgentResponse } from './models/agent.model';
-import { AgentService } from './services/agent.service';
-import { ChatStateService } from './services/chat-state.service';
+import { UIAction } from './models/ui-actions.model';
+import { ChatActions } from './store/chat.actions';
+import * as ChatSelectors from './store/chat.selectors';
+import { ChatEffects } from './store/chat.effects';
+import { ContextService } from './services/context.service';
+import { ConnectionService } from './services/connection.service';
+import { UIActionEmitterService } from './services/ui-action-emitter.service';
 
 import { MessageListComponent } from './components/message-list/message-list.component';
 import { ChatInputComponent } from './components/chat-input/chat-input.component';
 import { PromptSuggestionsComponent } from './components/prompt-suggestions/prompt-suggestions.component';
 import { HistoryTabComponent } from './components/history-tab/history-tab.component';
+import { ConnectionBannerComponent } from './components/connection-banner/connection-banner.component';
 
 type Tab = 'chat' | 'history';
 
@@ -38,9 +34,9 @@ type Tab = 'chat' | 'history';
   standalone: true,
   imports: [
     CommonModule, MessageListComponent, ChatInputComponent,
-    PromptSuggestionsComponent, HistoryTabComponent,
+    PromptSuggestionsComponent, HistoryTabComponent, ConnectionBannerComponent
   ],
-  providers: [ChatStateService],
+  providers: [],
   changeDetection: ChangeDetectionStrategy.OnPush,
   encapsulation: ViewEncapsulation.ShadowDom,
   templateUrl: './chatbot.component.html',
@@ -48,41 +44,48 @@ type Tab = 'chat' | 'history';
 })
 export class ChatbotComponent implements OnInit, OnDestroy, OnChanges {
 
-  // ============================================
-  // ★ TASK 7: INPUTS — Using @Input() decorators
-  // Angular Elements maps these to element properties.
-  // ============================================
-
+  // ---- Inputs (Angular Elements compatible) ----
   @Input() auth: ChatbotAuth | null = null;
   @Input() audienceBuilderState: ChatbotAudienceState | null = null;
   @Input() config: ChatbotConfig | null = null;
   @Input() command: ChatbotCommand | null = null;
 
-  // ============================================
-  // ★ TASK 7: OUTPUTS — Using @Output() EventEmitter
-  // Angular Elements maps these to CustomEvents.
-  // ============================================
-
+  // ---- Outputs ----
   @Output() chatbotAction = new EventEmitter<ChatbotActionEvent>();
   @Output() chatbotMessage = new EventEmitter<string>();
   @Output() chatbotUiLock = new EventEmitter<ChatbotUiLockEvent>();
   @Output() chatbotAgentStatus = new EventEmitter<ChatbotAgentStatusEvent>();
   @Output() chatbotError = new EventEmitter<ChatbotErrorEvent>();
   @Output() chatbotReady = new EventEmitter<boolean>();
+  /** Story 9: Emits granular UI actions for the host */
+  @Output() chatbotUiAction = new EventEmitter<UIAction>();
+  /** Story 4: Emits when user clicks Start Over */
+  @Output() chatbotClearSelections = new EventEmitter<void>();
 
-  // ============================================
-  // Internal state (signals are fine here)
-  // ============================================
-
-  readonly chatState = inject(ChatStateService);
-  private readonly agentService = inject(AgentService);
+  // ---- Injections ----
+  private readonly store = inject(Store);
   private readonly cdr = inject(ChangeDetectorRef);
+  private readonly contextService = inject(ContextService);
+  private readonly connectionService = inject(ConnectionService);
+  private readonly uiActionEmitter = inject(UIActionEmitterService);
+  private readonly chatEffects = inject(ChatEffects);
+  private readonly destroy$ = new Subject<void>();
+  private readonly injector = inject(Injector);
+
+  // ---- State from NgRx (via signals for template) ----
+  readonly messages = signal<any[]>([]);
+  readonly sessions = signal<any[]>([]);
+  readonly activeSessionId = signal<string | null>(null);
+  readonly isAgentTyping = signal(false);
+  readonly hasUserMessages = signal(false);
+  readonly connectionStatus = signal<string>('disconnected');
+  readonly sessionsCount = computed(() => this.sessions().length);
+  readonly retryAttempt = signal(0);
+  readonly retryMaxAttempts = signal(5);
+  readonly retryCountdownMs = signal(0);
+  readonly connectionError = signal<string | null>(null);
 
   readonly activeTab = signal<Tab>('chat');
-
-  // Internal signal tracking the latest audience state
-  // Agent service reads this when composing messages
-  private readonly _latestAudienceState = signal<ChatbotAudienceState | null>(null);
 
   readonly currentPrompts = computed(() => {
     const custom = this.config?.prompts;
@@ -93,207 +96,184 @@ export class ChatbotComponent implements OnInit, OnDestroy, OnChanges {
     ];
   });
 
-  // ============================================
-  // Lifecycle
-  // ============================================
+  // ---- Lifecycle ----
 
   ngOnInit(): void {
+    // Subscribe NgRx selectors → signals for the template
+    this.store.select(ChatSelectors.selectMessages)
+      .pipe(takeUntil(this.destroy$))
+      .subscribe(v => { this.messages.set(v); this.cdr.markForCheck(); });
+
+    this.store.select(ChatSelectors.selectSessions)
+      .pipe(takeUntil(this.destroy$))
+      .subscribe(v => { this.sessions.set(v); this.cdr.markForCheck(); });
+
+    this.store.select(ChatSelectors.selectActiveSessionId)
+      .pipe(takeUntil(this.destroy$))
+      .subscribe(v => { this.activeSessionId.set(v); this.cdr.markForCheck(); });
+
+    this.store.select(ChatSelectors.selectIsAgentTyping)
+      .pipe(takeUntil(this.destroy$))
+      .subscribe(v => { this.isAgentTyping.set(v); this.cdr.markForCheck(); });
+
+    this.store.select(ChatSelectors.selectHasUserMessages)
+      .pipe(takeUntil(this.destroy$))
+      .subscribe(v => { this.hasUserMessages.set(v); this.cdr.markForCheck(); });
+
+    this.store.select(ChatSelectors.selectConnectionStatus)
+      .pipe(takeUntil(this.destroy$))
+      .subscribe(v => { this.connectionStatus.set(v); this.cdr.markForCheck(); });
+
+    const connSvc = this.connectionService;
+    effect(() => {
+      this.retryAttempt.set(connSvc.retryAttempt());
+      this.retryMaxAttempts.set(connSvc.maxRetries());
+      this.retryCountdownMs.set(connSvc.nextRetryMs());
+      this.connectionError.set(connSvc.errorMessage());
+      this.cdr.markForCheck();
+    }, { injector: this.injector });
+
+    // Story 12: Set auth context
+    if (this.auth) {
+      this.contextService.setAuth(this.auth);
+    }
+
+    // Story 10: Load persisted sessions
+    this.chatEffects.loadPersistedSessions();
+
+    // Story 9: Register UI action handler
+    this.uiActionEmitter.registerHandler(async (action) => {
+      this.chatbotUiAction.emit(action);
+      return { actionId: crypto.randomUUID(), action, status: 'success' };
+    });
+
+    // Ready
+    this.connectionService.markConnected();
+    this.store.dispatch(ChatActions.connectionStatusChanged({ status: 'connected' }));
     this.chatbotAgentStatus.emit({ status: 'connected' });
     this.chatbotReady.emit(true);
   }
 
   ngOnDestroy(): void {
-    this.agentService.disconnect();
+    this.destroy$.next();
+    this.destroy$.complete();
   }
 
-  /**
-   * React to property changes from the host.
-   * Angular Elements calls this when the host sets properties.
-   */
   ngOnChanges(changes: SimpleChanges): void {
-    // Handle command input
-    if (changes['command'] && this.command) {
-      this.handleCommand(this.command);
+    // Story 12: Update auth context
+    if (changes['auth'] && this.auth) {
+      this.contextService.setAuth(this.auth);
     }
 
-    // Handle config changes (e.g. prompts update)
-    if (changes['config']) {
-      this.cdr.markForCheck();
-    }
-
-    // Handle audience state changes — notify the chat
+    // Story 8: Audience state sync
     if (changes['audienceBuilderState'] && this.audienceBuilderState) {
+      this.contextService.setAudienceState(this.audienceBuilderState);
+      this.store.dispatch(ChatActions.audienceStateUpdated({ state: this.audienceBuilderState }));
+
       const prev = changes['audienceBuilderState'].previousValue as ChatbotAudienceState | null;
-      const curr = this.audienceBuilderState;
-
-      console.log(
-        '[Chatbot] Received audience state:',
-        curr.folders.length, 'folders,',
-        curr.totalAudienceCount, 'records'
-      );
-
-      // Store latest state so agent can read it
-      this._latestAudienceState.set(curr);
-
-      // Show a subtle notification in chat if there was a previous state
-      // (skip the initial set on mount)
-      if (prev && prev.timestamp !== curr.timestamp) {
-        const diff = this.describeStateDiff(prev, curr);
+      if (prev && prev.timestamp !== this.audienceBuilderState.timestamp) {
+        const diff = this.describeStateDiff(prev, this.audienceBuilderState);
         if (diff) {
-          this.chatState.addSystemMessage(`📊 Audience updated: ${diff}`);
-          this.cdr.markForCheck();
+          this.store.dispatch(ChatActions.addSystemMessage({ content: `📊 Audience updated: ${diff}` }));
         }
       }
     }
-  }
 
-  // ============================================
-  // Chat
-  // ============================================
-
-  onUserMessage(text: string): void {
-    this.activeTab.set('chat');
-    this.chatState.addUserMessage(text);
-    this.chatbotMessage.emit(text);
-    this.sendToAgent(text);
-    this.cdr.markForCheck();
-  }
-
-  private sendToAgent(message: string): void {
-    const msgId = this.chatState.startAgentMessage();
-
-    const history = this.chatState.messages()
-      .filter(m => m.role !== 'system')
-      .map(m => ({ role: m.role, content: m.content }));
-
-    this.agentService
-      .sendMessage(
-        message,
-        this.auth ?? { userId: '', environmentId: '', profileId: '', permissions: [] },
-        this.audienceBuilderState,
-        history
-      )
-      .subscribe({
-        next: (r: AgentResponse) => {
-          this.handleAgentResponse(msgId, r);
-          this.cdr.markForCheck();
-        },
-        error: (err) => {
-          this.chatState.finalizeAgentMessage(msgId);
-          this.chatState.addSystemMessage(`Error: ${err.message}`);
-          this.chatbotError.emit({ code: 'AGENT_ERROR', message: err.message });
-          this.cdr.markForCheck();
-        },
-      });
-  }
-
-  private handleAgentResponse(msgId: string, r: AgentResponse): void {
-    switch (r.type) {
-      case 'text':
-        this.chatState.appendToAgentMessage(msgId, r.content ?? '');
-        break;
-      case 'action':
-        if (r.action) {
-          const pending: PendingAction = {
-            type: r.action.type,
-            requestId: crypto.randomUUID(),
-            label: r.action.label,
-            description: r.action.description,
-            payload: r.action.payload,
-            status: 'pending',
-          };
-          this.chatState.attachAction(msgId, pending);
-        }
-        break;
-      case 'done':
-        this.chatState.finalizeAgentMessage(msgId);
-        break;
-      case 'error':
-        this.chatState.finalizeAgentMessage(msgId);
-        this.chatState.addSystemMessage(`Agent error: ${r.error}`);
-        break;
+    // Host command
+    if (changes['command'] && this.command) {
+      this.handleCommand(this.command);
     }
   }
 
-  // ============================================
-  // ★ TASK 10: Action Emission ★
-  // ============================================
+  onRetryConnection(): void {
+    this.connectionService.forceRetry();
+    // Re-send the last message if there was one
+    const lastUserMsg = this.messages()
+      .filter(m => m.role === 'user')
+      .pop();
+    if (lastUserMsg) {
+      this.store.dispatch(ChatActions.sendMessage({ content: lastUserMsg.content }));
+    }
+  }
+
+  // ---- User interactions ----
+
+  onUserMessage(text: string): void {
+    this.activeTab.set('chat');
+    this.store.dispatch(ChatActions.sendMessage({ content: text }));
+    this.chatbotMessage.emit(text);
+  }
+
+  onPromptSelected(prompt: string): void {
+    this.activeTab.set('chat');
+    this.store.dispatch(ChatActions.selectPrompt({ prompt }));
+    this.chatbotMessage.emit(prompt);
+  }
+
+  /** Story 4: Start Over */
+  onStartOver(): void {
+    this.store.dispatch(ChatActions.startOver());
+    this.chatbotClearSelections.emit();
+  }
+
+  // ---- Actions (Task 10) ----
 
   onActionConfirm(requestId: string): void {
-    this.chatState.updateActionStatus(requestId, 'confirmed');
-    const msg = this.chatState.messages().find(m => m.action?.requestId === requestId);
+    this.store.dispatch(ChatActions.confirmAction({ requestId }));
+
+    const msg = this.messages().find(m => m.action?.requestId === requestId);
     if (!msg?.action) return;
 
     this.chatbotUiLock.emit({ locked: true, reason: 'Applying agent plan...' });
     this.chatbotAction.emit({
       type: msg.action.type,
-      requestId: msg.action.requestId,
+      requestId,
       confirmed: true,
       payload: msg.action.payload,
     });
-    this.cdr.markForCheck();
-  }
 
-  onActionReject(requestId: string): void {
-    this.chatState.updateActionStatus(requestId, 'rejected');
-    this.chatState.addSystemMessage('Action dismissed.');
-    this.cdr.markForCheck();
-  }
-
-  // ============================================
-  // History
-  // ============================================
-
-  startNewChat(): void {
-    this.chatState.startNewSession();
-    this.activeTab.set('chat');
-    this.cdr.markForCheck();
-  }
-
-  onLoadSession(sessionId: string): void {
-    this.chatState.loadSession(sessionId);
-    this.activeTab.set('chat');
-    this.cdr.markForCheck();
-  }
-
-  onDeleteSession(sessionId: string): void {
-    this.chatState.deleteSession(sessionId);
-    this.cdr.markForCheck();
-  }
-
-  // ============================================
-  // Host → Chatbot commands
-  // ============================================
-
-  private handleCommand(cmd: ChatbotCommand): void {
-    console.log('[Chatbot] Received command:', cmd.type, cmd.payload);
-
-    if (cmd.type === 'actionResult') {
-      const { requestId, status, audienceCount, message } = cmd.payload;
-      if (status === 'success') {
-        this.chatState.updateActionStatus(
-          requestId,
-          'applied',
-          `Applied successfully. New audience: ${audienceCount?.toLocaleString() ?? 'unknown'} records.`
-        );
-        this.chatState.addSystemMessage(
-          `✅ Plan applied — audience is now ${audienceCount?.toLocaleString()} records.`
-        );
-      } else {
-        this.chatState.updateActionStatus(
-          requestId,
-          'error',
-          `Failed: ${message ?? 'Unknown error'}`
-        );
-      }
-      this.chatbotUiLock.emit({ locked: false });
-      this.cdr.markForCheck();
+    // Story 9: Parse into granular UI actions
+    if (msg.action.type === 'applySkittlePlan') {
+      const uiActions = this.uiActionEmitter.parseSkittlePlan(msg.action.payload);
+      this.uiActionEmitter.executeActions(uiActions);
     }
   }
 
-  // ============================================
-  // State diff — describes what changed for the chat
-  // ============================================
+  onActionReject(requestId: string): void {
+    this.store.dispatch(ChatActions.rejectAction({ requestId }));
+  }
+
+  // ---- History ----
+
+  startNewChat(): void {
+    this.store.dispatch(ChatActions.startNewSession());
+    this.activeTab.set('chat');
+  }
+
+  onLoadSession(sessionId: string): void {
+    this.store.dispatch(ChatActions.loadSession({ sessionId }));
+    this.activeTab.set('chat');
+  }
+
+  onDeleteSession(sessionId: string): void {
+    this.store.dispatch(ChatActions.deleteSession({ sessionId }));
+  }
+
+  // ---- Host commands ----
+
+  private handleCommand(cmd: ChatbotCommand): void {
+    if (cmd.type === 'actionResult') {
+      this.store.dispatch(ChatActions.actionResultReceived({
+        requestId: cmd.payload.requestId,
+        status: cmd.payload.status,
+        audienceCount: cmd.payload.audienceCount,
+        message: cmd.payload.message,
+      }));
+      this.chatbotUiLock.emit({ locked: false });
+    }
+  }
+
+  // ---- Helpers ----
 
   private describeStateDiff(
     prev: ChatbotAudienceState,
@@ -301,42 +281,24 @@ export class ChatbotComponent implements OnInit, OnDestroy, OnChanges {
   ): string | null {
     const parts: string[] = [];
 
-    // Count changes
     const countDiff = curr.totalAudienceCount - prev.totalAudienceCount;
     if (countDiff !== 0) {
       const dir = countDiff > 0 ? '↑' : '↓';
-      parts.push(
-        `${curr.totalAudienceCount.toLocaleString()} records (${dir}${Math.abs(countDiff).toLocaleString()})`
-      );
+      parts.push(`${curr.totalAudienceCount.toLocaleString()} records (${dir}${Math.abs(countDiff).toLocaleString()})`);
     }
 
-    // Folder-level changes
-    for (const currFolder of curr.folders) {
-      const prevFolder = prev.folders.find(f => f.id === currFolder.id);
-      if (!prevFolder) {
-        parts.push(`added folder "${currFolder.name}"`);
-        continue;
-      }
-
-      const prevIds = new Set(prevFolder.selectedValues.map(v => v.id));
-      const currIds = new Set(currFolder.selectedValues.map(v => v.id));
-
-      const added = currFolder.selectedValues.filter(v => !prevIds.has(v.id));
-      const removed = prevFolder.selectedValues.filter(v => !currIds.has(v.id));
-
-      if (added.length > 0) {
-        parts.push(`${currFolder.name}: +${added.map(v => v.label).join(', ')}`);
-      }
-      if (removed.length > 0) {
-        parts.push(`${currFolder.name}: -${removed.map(v => v.label).join(', ')}`);
-      }
+    for (const f of curr.folders) {
+      const pf = prev.folders.find(x => x.id === f.id);
+      if (!pf) { parts.push(`added "${f.name}"`); continue; }
+      const prevIds = new Set(pf.selectedValues.map(v => v.id));
+      const currIds = new Set(f.selectedValues.map(v => v.id));
+      const added = f.selectedValues.filter(v => !prevIds.has(v.id));
+      const removed = pf.selectedValues.filter(v => !currIds.has(v.id));
+      if (added.length) parts.push(`${f.name}: +${added.map(v => v.label).join(', ')}`);
+      if (removed.length) parts.push(`${f.name}: -${removed.map(v => v.label).join(', ')}`);
     }
-
-    // Removed folders
-    for (const prevFolder of prev.folders) {
-      if (!curr.folders.find(f => f.id === prevFolder.id)) {
-        parts.push(`removed folder "${prevFolder.name}"`);
-      }
+    for (const pf of prev.folders) {
+      if (!curr.folders.find(f => f.id === pf.id)) parts.push(`removed "${pf.name}"`);
     }
 
     return parts.length > 0 ? parts.join(' · ') : null;
