@@ -1,20 +1,18 @@
 import {
   Component,
-  input,
-  output,
-  effect,
-  signal,
-  inject,
-  computed,
-  OnInit,
-  OnDestroy,
-  ChangeDetectionStrategy,
-  ViewEncapsulation,
-  OnChanges,
   Input,
   Output,
   EventEmitter,
-  ChangeDetectorRef, SimpleChanges,
+  OnInit,
+  OnDestroy,
+  OnChanges,
+  SimpleChanges,
+  signal,
+  computed,
+  inject,
+  ChangeDetectionStrategy,
+  ViewEncapsulation,
+  ChangeDetectorRef,
 } from '@angular/core';
 import { CommonModule } from '@angular/common';
 
@@ -82,6 +80,10 @@ export class ChatbotComponent implements OnInit, OnDestroy, OnChanges {
 
   readonly activeTab = signal<Tab>('chat');
 
+  // Internal signal tracking the latest audience state
+  // Agent service reads this when composing messages
+  private readonly _latestAudienceState = signal<ChatbotAudienceState | null>(null);
+
   readonly currentPrompts = computed(() => {
     const custom = this.config?.prompts;
     return custom?.length ? custom : [
@@ -119,13 +121,29 @@ export class ChatbotComponent implements OnInit, OnDestroy, OnChanges {
       this.cdr.markForCheck();
     }
 
-    // Handle audience state changes
+    // Handle audience state changes — notify the chat
     if (changes['audienceBuilderState'] && this.audienceBuilderState) {
+      const prev = changes['audienceBuilderState'].previousValue as ChatbotAudienceState | null;
+      const curr = this.audienceBuilderState;
+
       console.log(
         '[Chatbot] Received audience state:',
-        this.audienceBuilderState.folders.length, 'folders,',
-        this.audienceBuilderState.totalAudienceCount, 'records'
+        curr.folders.length, 'folders,',
+        curr.totalAudienceCount, 'records'
       );
+
+      // Store latest state so agent can read it
+      this._latestAudienceState.set(curr);
+
+      // Show a subtle notification in chat if there was a previous state
+      // (skip the initial set on mount)
+      if (prev && prev.timestamp !== curr.timestamp) {
+        const diff = this.describeStateDiff(prev, curr);
+        if (diff) {
+          this.chatState.addSystemMessage(`📊 Audience updated: ${diff}`);
+          this.cdr.markForCheck();
+        }
+      }
     }
   }
 
@@ -271,5 +289,56 @@ export class ChatbotComponent implements OnInit, OnDestroy, OnChanges {
       this.chatbotUiLock.emit({ locked: false });
       this.cdr.markForCheck();
     }
+  }
+
+  // ============================================
+  // State diff — describes what changed for the chat
+  // ============================================
+
+  private describeStateDiff(
+    prev: ChatbotAudienceState,
+    curr: ChatbotAudienceState
+  ): string | null {
+    const parts: string[] = [];
+
+    // Count changes
+    const countDiff = curr.totalAudienceCount - prev.totalAudienceCount;
+    if (countDiff !== 0) {
+      const dir = countDiff > 0 ? '↑' : '↓';
+      parts.push(
+        `${curr.totalAudienceCount.toLocaleString()} records (${dir}${Math.abs(countDiff).toLocaleString()})`
+      );
+    }
+
+    // Folder-level changes
+    for (const currFolder of curr.folders) {
+      const prevFolder = prev.folders.find(f => f.id === currFolder.id);
+      if (!prevFolder) {
+        parts.push(`added folder "${currFolder.name}"`);
+        continue;
+      }
+
+      const prevIds = new Set(prevFolder.selectedValues.map(v => v.id));
+      const currIds = new Set(currFolder.selectedValues.map(v => v.id));
+
+      const added = currFolder.selectedValues.filter(v => !prevIds.has(v.id));
+      const removed = prevFolder.selectedValues.filter(v => !currIds.has(v.id));
+
+      if (added.length > 0) {
+        parts.push(`${currFolder.name}: +${added.map(v => v.label).join(', ')}`);
+      }
+      if (removed.length > 0) {
+        parts.push(`${currFolder.name}: -${removed.map(v => v.label).join(', ')}`);
+      }
+    }
+
+    // Removed folders
+    for (const prevFolder of prev.folders) {
+      if (!curr.folders.find(f => f.id === prevFolder.id)) {
+        parts.push(`removed folder "${prevFolder.name}"`);
+      }
+    }
+
+    return parts.length > 0 ? parts.join(' · ') : null;
   }
 }
