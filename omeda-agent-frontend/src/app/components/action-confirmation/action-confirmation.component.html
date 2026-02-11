@@ -1,0 +1,28 @@
+<div class="action-card" [class]="action().status">
+  <div class="action-header">
+        <span class="action-icon">
+          @switch (action().status) {
+            @case ('pending') { ⚡ }
+            @case ('confirmed') { ⏳ }
+            @case ('applied') { ✅ }
+            @case ('rejected') { ❌ }
+            @case ('error') { ⚠️ }
+          }
+        </span>
+    <strong>{{ action().label }}</strong>
+  </div>
+  <p class="action-desc">{{ action().description }}</p>
+
+  @if (action().status === 'pending') {
+    <div class="action-buttons">
+      <button class="btn-confirm" (click)="confirm.emit()">Apply</button>
+      <button class="btn-reject" (click)="reject.emit()">Dismiss</button>
+    </div>
+  }
+  @if (action().status === 'confirmed') {
+    <p class="action-status">Applying changes...</p>
+  }
+  @if (action().resultSummary) {
+    <p class="action-result">{{ action().resultSummary }}</p>
+  }
+</div>

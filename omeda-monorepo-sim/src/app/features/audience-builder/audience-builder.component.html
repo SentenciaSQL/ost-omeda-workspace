@@ -1,0 +1,68 @@
+<!-- ============ SIMULATION CONTROLS (not shipped) ============ -->
+<div class="sim-toolbar">
+  <h3>🔧 Simulation Controls</h3>
+  <button (click)="togglePermission()">
+    Toggle Agent Permission: {{ hasAgentPermission() ? '✅ ON' : '❌ OFF' }}
+  </button>
+  <button (click)="resetCriteria()">Reset Criteria</button>
+  <span class="sim-label">Total Audience: {{ totalCount() | number }}</span>
+</div>
+
+<!-- ============ SIMULATED AUDIENCE BUILDER UI ============ -->
+<div class="audience-builder-canvas" [class.ui-locked]="uiLocked()">
+  <h2>Audience Builder (Simulated)</h2>
+
+  <!-- Simulated folder/value checkboxes -->
+  <div class="folders-panel">
+    @for (folder of criteria()?.criteria; track folder.folderId) {
+      <div class="folder-card">
+        <h4>{{ folder.folderName }} <span class="operator">({{ folder.operator }})</span></h4>
+        @for (val of folder.values; track val.id) {
+          <label class="value-checkbox">
+            <input
+              type="checkbox"
+              [checked]="val.selected"
+              (change)="onValueToggle(folder.folderId, val.id, $event)"
+            />
+            {{ val.label }}
+          </label>
+        }
+      </div>
+    }
+  </div>
+
+  <!-- ============ TASK 2: Permission Guard + Container ============ -->
+  <!--
+    ★ SHIP THIS BLOCK ★
+    In the real repo, add this to the query.component template.
+    The @if checks the permission; the div is the mount point.
+  -->
+  @if (hasAgentPermission()) {
+    <div
+      #chatbotContainer
+      id="omeda-chatbot-container"
+      class="chatbot-panel"
+    ></div>
+  }
+  <!-- ============ END TASK 2 ============ -->
+
+  <!-- UI Lock overlay -->
+  @if (uiLocked()) {
+    <div class="ui-lock-overlay">
+      <p>🔒 {{ uiLockReason() }}</p>
+    </div>
+  }
+</div>
+
+<!-- ============ EVENT LOG (simulation only) ============ -->
+<div class="event-log">
+  <h3>📋 Event Log</h3>
+  <div class="log-entries">
+    @for (entry of eventLog(); track $index) {
+      <div class="log-entry" [class]="entry.type">
+        <span class="log-time">{{ entry.time }}</span>
+        <span class="log-msg">{{ entry.message }}</span>
+      </div>
+    }
+  </div>
+</div>

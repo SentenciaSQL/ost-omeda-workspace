@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>OmedaAgentFrontend</title>
+  <base href="/">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" type="image/x-icon" href="favicon.ico">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: system-ui, sans-serif;
+      background: #f0eef6;
+      display: flex; justify-content: center;
+      padding: 24px; min-height: 100vh;
+    }
+    .dev-layout {
+      display: flex; gap: 24px; max-width: 900px; width: 100%;
+    }
+    .dev-controls {
+      width: 280px; background: #1a1a2e; color: #e0e0e0;
+      padding: 16px; border-radius: 14px; font-size: 13px;
+      height: fit-content; flex-shrink: 0;
+    }
+    .dev-controls h3 { margin: 0 0 10px; color: #b0a8d0; font-size: 13px; }
+    .dev-controls button {
+      display: block; width: 100%; margin: 5px 0; padding: 8px 10px;
+      background: #2a2a4a; color: #e0e0e0; border: 1px solid #3a3a5a;
+      border-radius: 8px; cursor: pointer; font-size: 12px; font-family: inherit;
+    }
+    .dev-controls button:hover { background: #3a3a6a; }
+    .dev-controls pre {
+      background: #0d0d1a; padding: 8px; border-radius: 8px;
+      font-size: 11px; margin-top: 10px; max-height: 260px;
+      overflow-y: auto; color: #aaa;
+    }
+    .chatbot-wrapper {
+      width: 380px; height: 640px; flex-shrink: 0;
+    }
+    omeda-chatbot { display: block; width: 100%; height: 100%; }
+  </style>
+</head>
+<body>
+<div class="dev-layout">
+  <div class="dev-controls">
+    <h3>🔧 Dev Controls</h3>
+    <button onclick="pushState()">Push Audience State</button>
+    <button onclick="simulateResult()">Simulate Action Result</button>
+    <button onclick="pushPrompts()">Set Custom Prompts</button>
+    <button onclick="logProps()">Log Element Properties</button>
+    <h3 style="margin-top:14px;">📋 Events</h3>
+    <pre id="log">Waiting...</pre>
+  </div>
+  <div class="chatbot-wrapper">
+    <omeda-chatbot id="cb"></omeda-chatbot>
+  </div>
+</div>
+
+<script>
+  customElements.whenDefined('omeda-chatbot').then(() => {
+    const el = document.getElementById('cb');
+
+    el.auth = {
+      userId: 'dev-001', environmentId: 'env-42',
+      profileId: 'prof-007',
+      permissions: ['AUDIENCE_BUILDER_AGENT'],
+    };
+
+    el.audienceBuilderState = {
+      folders: [
+        { id:'f1', name:'Deployment Type', operator:'OR',
+          selectedValues: [{id:'v1',label:'Digital'},{id:'v3',label:'Events'}] },
+        { id:'f2', name:'Geography', operator:'AND',
+          selectedValues: [{id:'v4',label:'North America'}] },
+      ],
+      totalAudienceCount: 24580, timestamp: Date.now(),
+    };
+
+    el.config = {
+      prompts: [
+        'Build an audience of enterprise CTOs',
+        'Refine my current selection for better reach',
+        'Show me the current audience breakdown',
+      ],
+    };
+
+    ['chatbotAction','chatbotMessage','chatbotUiLock',
+      'chatbotAgentStatus','chatbotError','chatbotReady'].forEach(evt => {
+      el.addEventListener(evt, (e) => {
+        const log = document.getElementById('log');
+        log.textContent = `[${new Date().toLocaleTimeString()}] ${evt}:\n${JSON.stringify(e.detail,null,2)}\n\n` + log.textContent;
+
+        if (evt === 'chatbotAction' && e.detail.confirmed) {
+          setTimeout(() => {
+            el.command = {
+              type: 'actionResult', id: crypto.randomUUID(),
+              timestamp: Date.now(),
+              payload: {
+                requestId: e.detail.requestId, status: 'success',
+                audienceCount: Math.floor(Math.random()*50000)+5000,
+              },
+            };
+          }, 1500);
+        }
+      });
+    });
+  });
+
+  function pushState() {
+    document.getElementById('cb').audienceBuilderState = {
+      folders: [
+        { id:'f1', name:'Deployment Type', operator:'OR',
+          selectedValues: [{id:'v1',label:'Digital'},{id:'v2',label:'Print'},{id:'v3',label:'Events'}] },
+        { id:'f2', name:'Geography', operator:'AND',
+          selectedValues: [{id:'v4',label:'North America'},{id:'v5',label:'Europe'}] },
+        { id:'f3', name:'Job Function', operator:'OR',
+          selectedValues: [{id:'v8',label:'Marketing'}] },
+      ],
+      totalAudienceCount: 37200, timestamp: Date.now(),
+    };
+  }
+
+  function simulateResult() {
+    document.getElementById('cb').command = {
+      type: 'actionResult', id: crypto.randomUUID(), timestamp: Date.now(),
+      payload: { requestId: 'manual', status: 'success', audienceCount: 42000 },
+    };
+  }
+
+  function pushPrompts() {
+    document.getElementById('cb').config = {
+      prompts: [
+        'Find me healthcare executives in APAC',
+        'What does my current targeting look like?',
+        'Optimize for email engagement',
+      ],
+    };
+  }
+
+  function logProps() {
+    const el = document.getElementById('cb');
+    console.log('auth:', el.auth);
+    console.log('audienceBuilderState:', el.audienceBuilderState);
+    console.log('config:', el.config);
+  }
+</script>
+</body>
+</html>

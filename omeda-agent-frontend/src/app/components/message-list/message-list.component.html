@@ -1,0 +1,27 @@
+<div class="message-list" #scrollContainer>
+  @for (msg of messages(); track msg.id) {
+    <div class="message" [class]="msg.role">
+      <div class="bubble" [class.streaming]="msg.streaming">
+        <div class="content" [innerHTML]="formatContent(msg.content)"></div>
+        @if (msg.streaming) {
+          <span class="cursor">▊</span>
+        }
+      </div>
+      @if (msg.action) {
+        <cb-action-confirmation
+          [action]="msg.action"
+          (confirm)="confirmAction.emit(msg.action!.requestId)"
+          (reject)="rejectAction.emit(msg.action!.requestId)"
+        />
+      }
+      <div class="timestamp">{{ formatTime(msg.timestamp) }}</div>
+    </div>
+  }
+  @if (isTyping()) {
+    <div class="message agent">
+      <div class="bubble typing-indicator">
+        <span></span><span></span><span></span>
+      </div>
+    </div>
+  }
+</div>

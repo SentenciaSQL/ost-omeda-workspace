@@ -1,0 +1,8 @@
+<div class="prompts">
+  @for (prompt of prompts(); track $index) {
+    <button class="prompt-pill" (click)="selected.emit(prompt)">
+      <span class="prompt-bar"></span>
+      <span class="prompt-text">{{ prompt }}</span>
+    </button>
+  }
+</div>
