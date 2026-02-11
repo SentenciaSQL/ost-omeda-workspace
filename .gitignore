@@ -1,0 +1,86 @@
+# See https://docs.github.com/get-started/getting-started-with-git/ignoring-files for more about ignoring files.
+
+# Compiled output
+/omeda-monorepo-sim/dist
+/omeda-monorepo-sim/tmp
+/omeda-monorepo-sim/out-tsc
+/omeda-monorepo-sim/bazel-out
+
+# Node
+/omeda-monorepo-sim/node_modules
+npm-debug.log
+yarn-error.log
+
+# Angular cache
+/omeda-monorepo-sim/.angular/cache
+/omeda-monorepo-sim/.sass-cache/
+
+# IDEs
+/omeda-monorepo-sim/.idea/
+/omeda-monorepo-sim/.project
+/omeda-monorepo-sim/.classpath
+/omeda-monorepo-sim/.settings/
+
+# VS Code
+/omeda-monorepo-sim/.vscode/*
+!/omeda-monorepo-sim/.vscode/
+!/omeda-monorepo-sim/.vscode/settings.json
+!/omeda-monorepo-sim/.vscode/tasks.json
+!/omeda-monorepo-sim/.vscode/launch.json
+!/omeda-monorepo-sim/.vscode/extensions.json
+/omeda-monorepo-sim/.history/*
+
+# Tests & coverage
+/omeda-monorepo-sim/coverage
+/omeda-monorepo-sim/typings
+
+# Misc
+/libpeerconnection.log
+testem.log
+
+# System files
+.DS_Store
+Thumbs.db
+
+
+# Compiled output
+/omeda-agent-frontend/dist
+/omeda-agent-frontend/tmp
+/omeda-agent-frontend/out-tsc
+/omeda-agent-frontend/bazel-out
+
+# Node
+/omeda-agent-frontend/node_modules
+npm-debug.log
+yarn-error.log
+
+# Angular cache
+/omeda-agent-frontend/.angular/cache
+/omeda-agent-frontend/.sass-cache/
+
+# IDEs
+/omeda-agent-frontend/.idea/
+/omeda-agent-frontend/.project
+/omeda-agent-frontend/.classpath
+/omeda-agent-frontend/.settings/
+
+# VS Code
+/omeda-agent-frontend/.vscode/*
+!/omeda-agent-frontend/.vscode/
+!/omeda-agent-frontend/.vscode/settings.json
+!/omeda-agent-frontend/.vscode/tasks.json
+!/omeda-agent-frontend/.vscode/launch.json
+!/omeda-agent-frontend/.vscode/extensions.json
+/omeda-agent-frontend/.history/*
+
+# Tests & coverage
+/omeda-agent-frontend/coverage
+/omeda-agent-frontend/typings
+
+# Misc
+/libpeerconnection.log
+testem.log
+
+# System files
+.DS_Store
+Thumbs.db
