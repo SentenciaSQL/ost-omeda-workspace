@@ -9,7 +9,7 @@
     "watch": "ng build --watch --configuration development",
     "test": "ng test",
     "dev:watch": "ng build --watch --configuration development",
-    "dev:serve": "npx http-server dist/omeda-agent-frontend/browser --port 4201 --cors -c-1",
+    "dev:serve": "npx http-server dist/omeda-agent-frontend/browser --port 4202 --cors -c-1",
     "dev:bridge": "concurrently \"npm run dev:watch\" \"npm run dev:serve\""
   },
   "private": true,

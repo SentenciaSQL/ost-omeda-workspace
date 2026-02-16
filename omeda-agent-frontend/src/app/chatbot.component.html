@@ -9,26 +9,21 @@
         </svg>
       </button>
       <span class="header-title">Omeda AI</span>
-      <button class="new-chat-btn" title="New Chat" (click)="startNewChat()">
-        ✦
-      </button>
+      <div class="header-right">
+        <!-- Story 7: Connection indicator -->
+        <span class="conn-dot" [class]="connectionStatus()" [title]="connectionStatus()"></span>
+        <button class="new-chat-btn" title="New Chat" (click)="startNewChat()">✦</button>
+      </div>
     </div>
 
-    <!-- Tabs -->
     <div class="tabs">
-      <button
-        class="tab"
-        [class.active]="activeTab() === 'chat'"
-        (click)="activeTab.set('chat')"
-      >Chat</button>
-      <button
-        class="tab"
-        [class.active]="activeTab() === 'history'"
-        (click)="activeTab.set('history')"
-      >
+      <button class="tab" [class.active]="activeTab() === 'chat'"
+              (click)="activeTab.set('chat')">Chat</button>
+      <button class="tab" [class.active]="activeTab() === 'history'"
+              (click)="activeTab.set('history')">
         Chat History
-        @if (chatState.sessions().length > 0) {
-          <span class="tab-badge">{{ chatState.sessions().length }}</span>
+        @if (sessionsCount() > 0) {
+          <span class="tab-badge">{{ sessionsCount() }}</span>
         }
       </button>
     </div>
@@ -37,28 +32,32 @@
   <!-- Tab Content -->
   <div class="tab-content">
     @if (activeTab() === 'chat') {
-      @if (!chatState.hasMessages()) {
+      <div class="chat-content d-flex flex-column h-75">
+      @if (!hasUserMessages()) {
         <cb-prompt-suggestions
           [prompts]="currentPrompts()"
-          (selected)="onUserMessage($event)"
+          (selected)="onPromptSelected($event)"
         />
       }
-
+      <div>
       <cb-message-list
-        [messages]="chatState.messages()"
-        [isTyping]="chatState.isAgentTyping()"
+        [messages]="messages()"
+        [isTyping]="isAgentTyping()"
         (confirmAction)="onActionConfirm($event)"
         (rejectAction)="onActionReject($event)"
       />
-
+      </div>
+      </div>
       <cb-chat-input
-        [disabled]="chatState.isAgentTyping()"
+        [disabled]="isAgentTyping()"
+        [showStartOver]="hasUserMessages()"
         (messageSent)="onUserMessage($event)"
+        (startOver)="onStartOver()"
       />
     } @else {
       <cb-history-tab
-        [sessions]="chatState.sessions()"
-        [activeSessionId]="chatState.activeSessionId()"
+        [sessions]="sessions()"
+        [activeSessionId]="activeSessionId()"
         (loadSession)="onLoadSession($event)"
         (deleteSession)="onDeleteSession($event)"
       />
